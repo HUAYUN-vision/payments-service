@@ -4,7 +4,10 @@ import { LoggerModule } from 'nestjs-pino';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { AppConfigModule } from './config/config.module';
 import { AppConfigService } from './config/app-config.service';
+import { ScheduleModule } from '@nestjs/schedule';
+import { DatabaseModule } from './modules/database/database.module';
 import { HealthModule } from './modules/health/health.module';
+import { InvoicesModule } from './modules/invoices/invoices.module';
 
 @Module({
   imports: [
@@ -18,11 +21,14 @@ import { HealthModule } from './modules/health/health.module';
             ? undefined
             : { target: 'pino-pretty', options: { singleLine: true, colorize: true } },
           autoLogging: { ignore: (req) => req.url?.includes('/health') ?? false },
-          redact: ['req.headers.authorization', 'req.headers.cookie'],
+          redact: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-api-key"]'],
         },
       }),
     }),
+    ScheduleModule.forRoot(),
+    DatabaseModule,
     HealthModule,
+    InvoicesModule,
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })

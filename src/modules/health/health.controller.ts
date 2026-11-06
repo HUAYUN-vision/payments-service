@@ -1,6 +1,11 @@
 import { Controller, Get, VERSION_NEUTRAL } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { HealthCheck, HealthCheckService, MemoryHealthIndicator } from '@nestjs/terminus';
+import {
+  HealthCheck,
+  HealthCheckService,
+  MemoryHealthIndicator,
+  TypeOrmHealthIndicator,
+} from '@nestjs/terminus';
 
 @ApiTags('health')
 @Controller({ path: 'health', version: VERSION_NEUTRAL })
@@ -8,6 +13,7 @@ export class HealthController {
   constructor(
     private readonly health: HealthCheckService,
     private readonly memory: MemoryHealthIndicator,
+    private readonly db: TypeOrmHealthIndicator,
   ) {}
 
   /** Liveness probe: process is up. */
@@ -21,6 +27,9 @@ export class HealthController {
   @Get('ready')
   @HealthCheck()
   ready() {
-    return this.health.check([() => this.memory.checkHeap('memory_heap', 512 * 1024 * 1024)]);
+    return this.health.check([
+      () => this.memory.checkHeap('memory_heap', 512 * 1024 * 1024),
+      () => this.db.pingCheck('database', { timeout: 1500 }),
+    ]);
   }
 }

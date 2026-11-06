@@ -16,7 +16,11 @@ async function bootstrap(): Promise<void> {
   if (config.get('SWAGGER_ENABLED')) {
     const document = SwaggerModule.createDocument(
       app,
-      new DocumentBuilder().setTitle('API').setVersion('1.0').addBearerAuth().build(),
+      new DocumentBuilder()
+        .setTitle('Payments API')
+        .setVersion('1.0')
+        .addApiKey({ type: 'apiKey', in: 'header', name: 'X-API-Key' }, 'api-key')
+        .build(),
     );
     SwaggerModule.setup('docs', app, document);
   }
