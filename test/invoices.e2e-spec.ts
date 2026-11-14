@@ -22,6 +22,7 @@ describe('Invoices (e2e)', () => {
   let app: INestApplication<App>;
   let callbackServer: Server;
   let callbackUrl: string;
+  const returnUrl = 'https://example.com/thanks';
   const received: Received[] = [];
   const yookassaPayments = new Map<string, { status: string }>();
   const realFetch = global.fetch;
@@ -87,6 +88,15 @@ describe('Invoices (e2e)', () => {
     expect(JSON.stringify(res.body.message)).toMatch(/provider|amount|callbackUrl/);
   });
 
+  it('requires returnUrl for yookassa', async () => {
+    const res = await api()
+      .post('/api/v1/invoices')
+      .set('x-api-key', KEY_A)
+      .send({ provider: 'yookassa', amount: 10, callbackUrl })
+      .expect(400);
+    expect(JSON.stringify(res.body.message)).toMatch(/returnUrl/);
+  });
+
   it('rejects unconfigured provider', async () => {
     await api()
       .post('/api/v1/invoices')
@@ -100,6 +110,7 @@ describe('Invoices (e2e)', () => {
       provider: 'yookassa',
       amount: 50,
       callbackUrl,
+      returnUrl,
       orderId: 'order-1',
       ...patch,
     });
@@ -167,6 +178,7 @@ describe('Invoices (e2e)', () => {
         amount: 199.9,
         description: 'Test order',
         callbackUrl,
+        returnUrl,
         metadata: { orderId: '42' },
       })
       .expect(201);

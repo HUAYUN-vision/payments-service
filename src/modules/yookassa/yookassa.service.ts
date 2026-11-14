@@ -26,7 +26,7 @@ export class YookassaService implements PaymentProvider {
   }
 
   async createPayment(params: CreatePaymentParams): Promise<CreatedPayment> {
-    const returnUrl = params.returnUrl ?? this.config.get('YOOKASSA_RETURN_URL');
+    const { returnUrl } = params;
     if (!returnUrl) {
       throw new BadRequestException('returnUrl is required for yookassa');
     }

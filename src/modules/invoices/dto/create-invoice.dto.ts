@@ -9,6 +9,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { InvoiceProvider, type InvoiceMetadata } from '../../database/entities/invoice.entity';
 
@@ -58,10 +59,13 @@ export class CreateInvoiceDto {
   callbackUrl: string;
 
   /**
-   * Только для yookassa: куда вернуть пользователя после оплаты.
-   * Если не задан — используется YOOKASSA_RETURN_URL.
+   * Куда перенаправить пользователя после оплаты.
+   * Обязателен для yookassa, для wechat игнорируется.
+   * @example "https://my-shop.example.com/thanks"
    */
-  @IsOptional()
+  @ValidateIf(
+    (o: CreateInvoiceDto) => o.provider === InvoiceProvider.YOOKASSA || o.returnUrl != null,
+  )
   @IsUrl({ ...urlOptions, protocols: ['http', 'https', 'tg'] })
   @MaxLength(2048)
   returnUrl?: string;

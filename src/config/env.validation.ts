@@ -67,8 +67,6 @@ export const envSchema = z.object({
   // --- YooKassa ---
   YOOKASSA_SHOP_ID: optionalString,
   YOOKASSA_SECRET_KEY: optionalString,
-  /** return_url по умолчанию, если клиент не передал returnUrl */
-  YOOKASSA_RETURN_URL: optionalString,
 
   // --- WeChat Pay (APIv3, Native) ---
   WECHAT_APPID: optionalString,
