@@ -63,6 +63,8 @@
 
 Возвращает тот же объект. `status`: `pending` → `paid` | `canceled`.
 
+Для `yookassa` перед ответом статус сверяется с API ЮKassa. Так инвойс становится `paid` или `canceled`, даже если HTTP-уведомление ещё не дошло.
+
 ### Уведомление на `callbackUrl`
 
 `POST` с телом:
@@ -92,7 +94,7 @@ const ok = timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
 | YooKassa  | `https://<host>/api/v1/yookassa/webhook` | личный кабинет → HTTP-уведомления: `payment.succeeded`, `payment.canceled` |
 | WeChat    | `https://<host>/api/v1/wechat/callback`  | `WECHAT_NOTIFY_URL` (передаётся в каждом заказе)                           |
 
-YooKassa: телу вебхука не доверяем — статус перепроверяется запросом `GET /v3/payments/{id}`. WeChat: ресурс расшифровывается ключом APIv3 (AES-GCM), что подтверждает отправителя. Сертификаты WeChat (`apiclient_cert.pem`, `apiclient_key.pem`) кладутся в `WECHAT_CERTS_DIR` (по умолчанию `data/keys`, в docker-compose монтируется `./data/keys`). Провайдер без настроек просто отключён — запрос на него вернёт `400`.
+YooKassa: телу вебхука не доверяем — статус перепроверяется запросом `GET /v3/payments/{id}`. Если платёж в `waiting_for_capture` (деньги захолдированы, но не списаны), сервис сам вызывает `POST /v3/payments/{id}/capture`. Кроме вебхука pending-инвойсы ЮKassa за последние 7 дней сверяются с API каждые 15 секунд — оплата не остаётся `pending`, если уведомление не настроено или потерялось. WeChat: ресурс расшифровывается ключом APIv3 (AES-GCM), что подтверждает отправителя. Сертификаты WeChat (`apiclient_cert.pem`, `apiclient_key.pem`) кладутся в `WECHAT_CERTS_DIR` (по умолчанию `data/keys`, в docker-compose монтируется `./data/keys`). Провайдер без настроек просто отключён — запрос на него вернёт `400`.
 
 ### БД и миграции
 

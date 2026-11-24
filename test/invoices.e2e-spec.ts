@@ -11,6 +11,7 @@ import {
   signCallback,
   TIMESTAMP_HEADER,
 } from '../src/modules/callbacks/callbacks.service';
+import { YookassaService } from '../src/modules/yookassa/yookassa.service';
 import { setupApp } from '../src/setup-app';
 
 const KEY_A = 'test-key-project-a-0001';
@@ -25,6 +26,7 @@ describe('Invoices (e2e)', () => {
   const returnUrl = 'https://example.com/thanks';
   const received: Received[] = [];
   const yookassaPayments = new Map<string, { status: string }>();
+  const yookassaCaptures: string[] = [];
   const realFetch = global.fetch;
 
   beforeAll(async () => {
@@ -32,6 +34,16 @@ describe('Invoices (e2e)', () => {
     jest.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       if (!url.startsWith('https://api.yookassa.ru/')) return realFetch(input, init);
+
+      const capture = url.match(/\/payments\/([^/]+)\/capture$/);
+      if (capture && init?.method === 'POST') {
+        const id = decodeURIComponent(capture[1]);
+        const payment = yookassaPayments.get(id);
+        if (!payment) return new Response('{}', { status: 404 });
+        yookassaCaptures.push(id);
+        payment.status = 'succeeded';
+        return Response.json({ id, status: 'succeeded', paid: true });
+      }
 
       if (init?.method === 'POST') {
         const body = JSON.parse(init.body as string) as { metadata: { invoiceId: string } };
@@ -228,6 +240,70 @@ describe('Invoices (e2e)', () => {
     });
 
     got = await api().get(`/api/v1/invoices/${invoice.id}`).set('x-api-key', KEY_A).expect(200);
+    expect(got.body.status).toBe('paid');
+    expect(got.body.paidAt).toBeTruthy();
+  });
+
+  it('marks a yookassa invoice paid from the provider status without a webhook', async () => {
+    const created = await api()
+      .post('/api/v1/invoices')
+      .set('x-api-key', KEY_A)
+      .send({ provider: 'yookassa', amount: 10, callbackUrl, returnUrl })
+      .expect(201);
+    const invoice = created.body as { id: string };
+    yookassaPayments.set(`yk-${invoice.id}`, { status: 'succeeded' });
+
+    await app.get(YookassaService).reconcilePending();
+
+    const [row] = await app
+      .get(DataSource)
+      .query<{ status: string }[]>('SELECT status FROM invoices WHERE id = $1', [invoice.id]);
+    expect(row.status).toBe('paid');
+
+    await waitFor(() => received.some((item) => item.body.includes(invoice.id)));
+    const cb = received.find((item) => item.body.includes(invoice.id))!;
+    expect(JSON.parse(cb.body)).toMatchObject({
+      event: 'invoice.paid',
+      invoice: { id: invoice.id, status: 'paid' },
+    });
+  });
+
+  it('captures a waiting_for_capture payment and marks the invoice paid', async () => {
+    const created = await api()
+      .post('/api/v1/invoices')
+      .set('x-api-key', KEY_A)
+      .send({ provider: 'yookassa', amount: 20, callbackUrl, returnUrl })
+      .expect(201);
+    const invoice = created.body as { id: string };
+    const paymentId = `yk-${invoice.id}`;
+    yookassaPayments.set(paymentId, { status: 'waiting_for_capture' });
+
+    await api()
+      .post('/api/v1/yookassa/webhook')
+      .send({ event: 'payment.waiting_for_capture', object: { id: paymentId } })
+      .expect(200);
+
+    expect(yookassaCaptures).toContain(paymentId);
+    const got = await api()
+      .get(`/api/v1/invoices/${invoice.id}`)
+      .set('x-api-key', KEY_A)
+      .expect(200);
+    expect(got.body.status).toBe('paid');
+  });
+
+  it('refreshes a pending yookassa invoice on GET', async () => {
+    const created = await api()
+      .post('/api/v1/invoices')
+      .set('x-api-key', KEY_A)
+      .send({ provider: 'yookassa', amount: 30, callbackUrl, returnUrl })
+      .expect(201);
+    const invoice = created.body as { id: string };
+    yookassaPayments.set(`yk-${invoice.id}`, { status: 'succeeded' });
+
+    const got = await api()
+      .get(`/api/v1/invoices/${invoice.id}`)
+      .set('x-api-key', KEY_A)
+      .expect(200);
     expect(got.body.status).toBe('paid');
     expect(got.body.paidAt).toBeTruthy();
   });

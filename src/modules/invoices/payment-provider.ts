@@ -16,4 +16,9 @@ export interface PaymentProvider {
   readonly currency: string;
   isConfigured(): boolean;
   createPayment(params: CreatePaymentParams): Promise<CreatedPayment>;
+  /**
+   * Сверить платёж у провайдера и обновить инвойс, если он уже оплачен или отменён.
+   * Вебхук может не дойти — тогда статус подтягивается отсюда.
+   */
+  refreshStatus?(externalId: string): Promise<void>;
 }

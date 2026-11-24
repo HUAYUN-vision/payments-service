@@ -105,7 +105,17 @@ export class InvoicesService {
   async findOne(project: string, id: string): Promise<InvoiceEntity> {
     const invoice = await this.invoices.findOneBy({ id, project });
     if (!invoice) throw new NotFoundException('invoice not found');
-    return invoice;
+    if (invoice.status !== InvoiceStatus.PENDING || !invoice.externalId) return invoice;
+
+    const provider = this.providers[invoice.provider];
+    if (!provider.refreshStatus) return invoice;
+    try {
+      await provider.refreshStatus(invoice.externalId);
+    } catch (error) {
+      this.logger.warn(`Status refresh failed for invoice ${invoice.id}`, error);
+      return invoice;
+    }
+    return this.invoices.findOneByOrFail({ id, project });
   }
 
   /** Повтор с тем же orderId допустим, только если это тот же заказ. */
