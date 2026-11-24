@@ -46,6 +46,9 @@ export class InvoicesService {
     }
 
     const provider = this.providers[dto.provider];
+    if (!provider.isConfigured()) {
+      throw new BadRequestException(`provider "${dto.provider}" is not configured`);
+    }
     if (dto.metadata && Buffer.byteLength(JSON.stringify(dto.metadata)) > METADATA_MAX_BYTES) {
       throw new BadRequestException(`metadata must be <= ${METADATA_MAX_BYTES} bytes`);
     }
