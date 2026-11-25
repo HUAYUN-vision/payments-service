@@ -17,6 +17,7 @@ import type {
   PaymentProvider,
 } from '../invoices/payment-provider';
 import type { WechatCallbackPayload, WechatTransaction } from './types/wechat.types';
+import { WechatPayRequest } from './wechat-pay-request';
 
 /** out_trade_no: 6-32 символа [A-Za-z0-9_-*] — uuid без дефисов ровно 32 */
 export const toOutTradeNo = (invoiceId: string) => invoiceId.replace(/-/g, '');
@@ -57,8 +58,9 @@ export class WechatService implements PaymentProvider, OnModuleInit {
     const codeUrl = (result.data as { code_url?: string } | undefined)?.code_url;
     if (result.status !== 200 || !codeUrl) {
       this.logger.error(`WeChat native order failed: ${JSON.stringify(result)}`);
-
-      throw new BadGatewayException(`wechat error: HTTP ${result.status}`);
+      throw new BadGatewayException(
+        result.status ? `wechat error: HTTP ${result.status}` : 'wechat is unavailable',
+      );
     }
     return { externalId: outTradeNo, paymentUrl: codeUrl };
   }
@@ -105,6 +107,7 @@ export class WechatService implements PaymentProvider, OnModuleInit {
         publicKey: fs.readFileSync(path.join(certsDir, 'apiclient_cert.pem')),
         privateKey: fs.readFileSync(path.join(certsDir, 'apiclient_key.pem')),
       });
+      this.wxPay.createHttp(new WechatPayRequest());
     } catch (e) {
       this.logger.error(`WeChat Pay init failed (certs dir: ${certsDir})`, e);
     }
