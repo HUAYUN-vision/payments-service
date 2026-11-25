@@ -45,6 +45,7 @@ export class WechatService implements PaymentProvider, OnModuleInit {
     if (!this.wxPay || !notifyUrl) throw new BadRequestException('wechat is not configured');
 
     const outTradeNo = toOutTradeNo(params.invoiceId);
+
     const result = await this.wxPay.transactions_native({
       description: params.description ?? `Invoice ${outTradeNo}`,
       out_trade_no: outTradeNo,
