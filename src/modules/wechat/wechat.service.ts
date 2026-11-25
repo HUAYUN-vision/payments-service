@@ -55,9 +55,8 @@ export class WechatService implements PaymentProvider, OnModuleInit {
 
     const codeUrl = (result.data as { code_url?: string } | undefined)?.code_url;
     if (result.status !== 200 || !codeUrl) {
-      this.logger.error(
-        `WeChat native order failed: ${result.status} ${JSON.stringify(result.error)}`,
-      );
+      this.logger.error(`WeChat native order failed: ${JSON.stringify(result)}`);
+
       throw new BadGatewayException(`wechat error: HTTP ${result.status}`);
     }
     return { externalId: outTradeNo, paymentUrl: codeUrl };
