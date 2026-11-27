@@ -117,6 +117,15 @@ describe('Invoices (e2e)', () => {
       .expect(400);
   });
 
+  it('requires network for usdt', async () => {
+    const res = await api()
+      .post('/api/v1/invoices')
+      .set('x-api-key', KEY_A)
+      .send({ provider: 'usdt', amount: 10, callbackUrl })
+      .expect(400);
+    expect(JSON.stringify(res.body.message)).toMatch(/network/);
+  });
+
   describe('idempotency by orderId', () => {
     const body = (patch: Record<string, unknown> = {}) => ({
       provider: 'yookassa',
@@ -306,6 +315,141 @@ describe('Invoices (e2e)', () => {
       .expect(200);
     expect(got.body.status).toBe('paid');
     expect(got.body.paidAt).toBeTruthy();
+  });
+});
+
+describe('USDT invoices (e2e)', () => {
+  let app: INestApplication<App>;
+  let callbackServer: Server;
+  let callbackUrl: string;
+
+  const ton = 'UQCSm8yuftis-hKRkt4cMeevPx37C0kGeAOAL65zIl54SFj3';
+  const ethereum = '0x03A15a4bA10CD3fB3F897279A4C77f4cB20034D5';
+  const tron = 'TUzoqY6MeeBBx1gkVSSC459NAZMU6cNryp';
+  const jetton = 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs';
+  const usdtEth = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+
+  beforeAll(async () => {
+    callbackServer = createServer((_req, res) => {
+      res.writeHead(200).end('ok');
+    });
+    await new Promise<void>((r) => callbackServer.listen(0, '127.0.0.1', r));
+    callbackUrl = `http://127.0.0.1:${(callbackServer.address() as AddressInfo).port}/cb`;
+
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication({ logger: false });
+    setupApp(app);
+    await app.init();
+    await app.get(DataSource).query('TRUNCATE invoices');
+  }, 60_000);
+
+  afterAll(async () => {
+    await app.close();
+    await new Promise((r) => callbackServer.close(r));
+  });
+
+  const api = () => request(app.getHttpServer());
+  const body = (patch: Record<string, unknown> = {}) => ({
+    provider: 'usdt',
+    network: 'ton',
+    amount: 10.5,
+    callbackUrl,
+    ...patch,
+  });
+
+  it('creates a TON invoice and tells two orders apart by the comment', async () => {
+    const before = Date.now();
+    const first = await api()
+      .post('/api/v1/invoices')
+      .set('x-api-key', KEY_A)
+      .send(body({ orderId: 'ton-1' }))
+      .expect(201);
+    const second = await api()
+      .post('/api/v1/invoices')
+      .set('x-api-key', KEY_A)
+      .send(body({ orderId: 'ton-2' }))
+      .expect(201);
+
+    expect(first.body).toMatchObject({
+      provider: 'usdt',
+      network: 'ton',
+      status: 'pending',
+      amount: 10.5,
+      payAmount: 10.5,
+      currency: 'USDT',
+      payAddress: ton,
+      memo: first.body.id,
+    });
+    expect(first.body.paymentUrl).toBe(
+      `ton://transfer/${ton}?jetton=${jetton}&amount=10500000&text=${first.body.id}`,
+    );
+    expect(second.body.paymentUrl).toContain(`text=${second.body.id}`);
+    expect(second.body.memo).not.toBe(first.body.memo);
+    expect(new Date(first.body.expiresAt as string).getTime()).toBeGreaterThan(before + 86_000_000);
+
+    const [row] = await app
+      .get(DataSource)
+      .query<{ external_id: string }[]>('SELECT external_id FROM invoices WHERE id = $1', [
+        first.body.id,
+      ]);
+    expect(row.external_id).toBe(first.body.id);
+  });
+
+  it('returns the same TON invoice and rejects another network for the same orderId', async () => {
+    const again = await api()
+      .post('/api/v1/invoices')
+      .set('x-api-key', KEY_A)
+      .send(body({ orderId: 'ton-1' }))
+      .expect(200);
+    expect(again.body.network).toBe('ton');
+
+    await api()
+      .post('/api/v1/invoices')
+      .set('x-api-key', KEY_A)
+      .send(body({ orderId: 'ton-1', network: 'ethereum' }))
+      .expect(409);
+  });
+
+  it('gives a second Ethereum invoice of 10.50 another pay amount', async () => {
+    const first = await api()
+      .post('/api/v1/invoices')
+      .set('x-api-key', KEY_A)
+      .send(body({ network: 'ethereum', orderId: 'eth-1' }))
+      .expect(201);
+    const second = await api()
+      .post('/api/v1/invoices')
+      .set('x-api-key', KEY_A)
+      .send(body({ network: 'ethereum', orderId: 'eth-2' }))
+      .expect(201);
+
+    expect(first.body.paymentUrl).toBe(
+      `ethereum:${usdtEth}@1/transfer?address=${ethereum}&uint256=10500000`,
+    );
+    expect(first.body.payAmount).toBe(10.5);
+    expect(first.body.memo).toBeNull();
+    expect(second.body.paymentUrl).toBe(
+      `ethereum:${usdtEth}@1/transfer?address=${ethereum}&uint256=10500001`,
+    );
+
+    const [row] = await app
+      .get(DataSource)
+      .query<{ pay_amount: string }[]>(
+        'SELECT pay_amount::text AS pay_amount FROM invoices WHERE id = $1',
+        [second.body.id],
+      );
+    expect(row.pay_amount).toBe('10.500001');
+  });
+
+  it('uses the TRON address as the payment url', async () => {
+    const created = await api()
+      .post('/api/v1/invoices')
+      .set('x-api-key', KEY_A)
+      .send(body({ network: 'tron', orderId: 'tron-1' }))
+      .expect(201);
+    expect(created.body.paymentUrl).toBe(tron);
+    expect(created.body.payAddress).toBe(tron);
+    expect(created.body.payAmount).toBe(10.5);
+    expect(created.body.memo).toBeNull();
   });
 });
 

@@ -2,6 +2,7 @@ import {
   type InvoiceEntity,
   InvoiceProvider,
   InvoiceStatus,
+  UsdtNetwork,
   type InvoiceMetadata,
 } from '../database/entities/invoice.entity';
 
@@ -12,10 +13,18 @@ export class InvoiceView {
   orderId: string | null;
   provider: InvoiceProvider;
   status: InvoiceStatus;
-  /** Сумма в основных единицах валюты (рубли / юани) */
+  /** Сумма заказа в основных единицах валюты (рубли / юани / USDT) */
   amount: number;
-  /** RUB для yookassa, CNY для wechat */
+  /** RUB для yookassa, CNY для wechat, USDT для usdt */
   currency: string;
+  /** Сеть USDT. У остальных провайдеров null. */
+  network: UsdtNetwork | null;
+  /** Сколько отправить. У Ethereum и TRON может быть больше amount на хвост. */
+  payAmount: number | null;
+  /** Адрес приёма USDT. */
+  payAddress: string | null;
+  /** Комментарий TON, равен id инвойса. У остальных сетей null. */
+  memo: string | null;
   description: string | null;
   /**
    * Ссылка на оплату.
@@ -26,6 +35,8 @@ export class InvoiceView {
   createdAt: Date;
   paidAt: Date | null;
   canceledAt: Date | null;
+  /** До этого момента USDT-инвойс pending, потом canceled. */
+  expiresAt: Date | null;
 }
 
 export function toInvoiceView(invoice: InvoiceEntity): InvoiceView {
@@ -36,11 +47,16 @@ export function toInvoiceView(invoice: InvoiceEntity): InvoiceView {
     status: invoice.status,
     amount: invoice.amount,
     currency: invoice.currency,
+    network: invoice.network ?? null,
+    payAmount: invoice.payAmount ?? null,
+    payAddress: invoice.payAddress ?? null,
+    memo: invoice.memo ?? null,
     description: invoice.description,
     paymentUrl: invoice.paymentUrl,
     metadata: invoice.metadata,
     createdAt: invoice.createdAt,
     paidAt: invoice.paidAt,
     canceledAt: invoice.canceledAt,
+    expiresAt: invoice.expiresAt ?? null,
   };
 }

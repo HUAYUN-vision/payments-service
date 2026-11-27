@@ -9,6 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
 import { InvoiceEntity, InvoiceProvider, InvoiceStatus } from '../database/entities/invoice.entity';
+import { UsdtService } from '../usdt/usdt.service';
 import { WechatService } from '../wechat/wechat.service';
 import { YookassaService } from '../yookassa/yookassa.service';
 import type { CreateInvoiceDto } from './dto/create-invoice.dto';
@@ -32,10 +33,12 @@ export class InvoicesService {
     @InjectRepository(InvoiceEntity) private readonly invoices: Repository<InvoiceEntity>,
     yookassaService: YookassaService,
     wechatService: WechatService,
+    usdtService: UsdtService,
   ) {
     this.providers = {
       [InvoiceProvider.YOOKASSA]: yookassaService,
       [InvoiceProvider.WECHAT]: wechatService,
+      [InvoiceProvider.USDT]: usdtService,
     };
   }
 
@@ -66,6 +69,7 @@ export class InvoicesService {
           status: InvoiceStatus.PENDING,
           amount: dto.amount,
           currency: provider.currency,
+          network: dto.provider === InvoiceProvider.USDT ? (dto.network ?? null) : null,
           description: dto.description ?? null,
           callbackUrl: dto.callbackUrl,
           metadata: dto.metadata ?? null,
@@ -85,12 +89,23 @@ export class InvoicesService {
         amount: invoice.amount,
         description: invoice.description,
         returnUrl: dto.returnUrl,
+        network: dto.provider === InvoiceProvider.USDT ? dto.network : undefined,
       });
       invoice.externalId = payment.externalId;
       invoice.paymentUrl = payment.paymentUrl;
+      invoice.network = payment.network ?? invoice.network;
+      invoice.payAmount = payment.payAmount ?? null;
+      invoice.payAddress = payment.payAddress ?? null;
+      invoice.memo = payment.memo ?? null;
+      invoice.expiresAt = payment.expiresAt ?? null;
       await this.invoices.update(invoice.id, {
         externalId: payment.externalId,
         paymentUrl: payment.paymentUrl,
+        network: invoice.network,
+        payAmount: invoice.payAmount,
+        payAddress: invoice.payAddress,
+        memo: invoice.memo,
+        expiresAt: invoice.expiresAt,
       });
     } catch (error) {
       // освобождаем orderId, чтобы клиент мог повторить запрос
@@ -120,10 +135,12 @@ export class InvoicesService {
 
   /** Повтор с тем же orderId допустим, только если это тот же заказ. */
   private ensureSameOrder(existing: InvoiceEntity, dto: CreateInvoiceDto): InvoiceEntity {
-    if (existing.provider !== dto.provider || existing.amount !== dto.amount) {
+    const network = dto.provider === InvoiceProvider.USDT ? (dto.network ?? null) : null;
+    const sameNetwork = dto.provider !== InvoiceProvider.USDT || existing.network === network;
+    if (existing.provider !== dto.provider || existing.amount !== dto.amount || !sameNetwork) {
       throw new ConflictException(
         `orderId "${dto.orderId}" is already used by invoice ${existing.id} ` +
-          `with different provider/amount`,
+          `with different provider/amount/network`,
       );
     }
     if (!existing.paymentUrl) {

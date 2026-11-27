@@ -2,6 +2,7 @@ import { extname, join } from 'node:path';
 import type { DataSourceOptions } from 'typeorm';
 import type { Env } from '../../config/env.validation';
 import { InvoiceEntity } from './entities/invoice.entity';
+import { UsdtCursorEntity } from './entities/usdt-cursor.entity';
 
 type DbEnv = Pick<
   Env,
@@ -19,7 +20,7 @@ export function buildDataSourceOptions(env: DbEnv): DataSourceOptions {
     password: env.DB_PASSWORD,
     logging: env.DB_LOGGING,
     synchronize: false,
-    entities: [InvoiceEntity],
+    entities: [InvoiceEntity, UsdtCursorEntity],
     // .ts из исходников (CLI, тесты), .js из dist — без .d.ts
     migrations: [join(__dirname, 'migrations', `*${extname(__filename)}`)],
   };

@@ -11,7 +11,11 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
-import { InvoiceProvider, type InvoiceMetadata } from '../../database/entities/invoice.entity';
+import {
+  InvoiceProvider,
+  UsdtNetwork,
+  type InvoiceMetadata,
+} from '../../database/entities/invoice.entity';
 
 const urlOptions = { require_tld: false, protocols: ['http', 'https'], require_protocol: true };
 
@@ -33,13 +37,21 @@ export class CreateInvoiceDto {
 
   /**
    * Сумма в основных единицах валюты, до 2 знаков после запятой.
-   * Валюта определяется провайдером: yookassa — RUB, wechat — CNY.
+   * Валюта определяется провайдером: yookassa — RUB, wechat — CNY, usdt — USDT.
    * @example 199.9
    */
   @IsNumber({ maxDecimalPlaces: 2, allowNaN: false, allowInfinity: false })
   @Min(0.01)
   @Max(999_999_999)
   amount: number;
+
+  /**
+   * Сеть USDT. Обязательна только при provider=usdt.
+   * @example "ton"
+   */
+  @ValidateIf((o: CreateInvoiceDto) => o.provider === InvoiceProvider.USDT)
+  @IsEnum(UsdtNetwork)
+  network?: UsdtNetwork;
 
   /**
    * Назначение платежа (видит плательщик)

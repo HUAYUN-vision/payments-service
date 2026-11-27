@@ -26,7 +26,7 @@ export class InvoicesController {
   /**
    * Создать инвойс и получить ссылку на оплату.
    * 201 — создан новый; 200 — инвойс с таким orderId уже есть, возвращён он;
-   * 409 — orderId занят инвойсом с другими provider/amount.
+   * 409 — orderId занят инвойсом с другими provider/amount/network.
    */
   @Post()
   async create(

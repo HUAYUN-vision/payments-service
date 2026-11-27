@@ -76,6 +76,18 @@ export const envSchema = z.object({
   WECHAT_NOTIFY_URL: optionalString,
   /** Папка с apiclient_cert.pem и apiclient_key.pem */
   WECHAT_CERTS_DIR: z.string().default('data/keys'),
+
+  // --- USDT (TON, Ethereum, TRON) ---
+  /** Пустой пароль выключает USDT. Из него при старте считаются три адреса приёма. */
+  USDT_WALLET_PASSWORD: optionalString,
+  USDT_TON_API_URL: optionalString,
+  USDT_TON_API_KEY: optionalString,
+  USDT_ETH_RPC_URL: optionalString,
+  USDT_ETH_CONFIRMATIONS: z.coerce.number().int().positive().default(12),
+  USDT_TRON_API_URL: optionalString,
+  USDT_TRON_API_KEY: optionalString,
+  USDT_TRON_CONFIRMATIONS: z.coerce.number().int().positive().default(19),
+  USDT_INVOICE_TTL_SEC: z.coerce.number().int().positive().default(86_400),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -47,8 +47,14 @@ export function signCallback(key: string, timestamp: string, body: string): stri
 }
 
 @Injectable()
-export class CallbacksService {
+export class CallbacksService implements OnModuleDestroy {
   private readonly logger = new Logger(CallbacksService.name);
+  /** Доставки, запущенные из markPaid/markCanceled. Ждём их до закрытия БД. */
+  private readonly inFlight = new Set<Promise<void>>();
+
+  onModuleDestroy(): Promise<void> {
+    return Promise.all([...this.inFlight]).then(() => undefined);
+  }
 
   constructor(
     @InjectRepository(InvoiceEntity) private readonly invoices: Repository<InvoiceEntity>,
@@ -159,11 +165,24 @@ export class CallbacksService {
 
     const invoice = await this.invoices.findOneByOrFail({ provider, externalId });
     this.logger.log(`Invoice ${invoice.id} (${provider}) -> ${status}`);
-    // не блокируем ответ провайдеру
-    void this.deliver(invoice).catch((e: unknown) =>
-      this.logger.error(`Callback delivery crashed for invoice ${invoice.id}`, e),
+    // не блокируем ответ провайдеру; при остановке onModuleDestroy дождётся записи в БД
+    this.enqueue(
+      this.deliver(invoice).catch((e: unknown) => {
+        this.logger.error(`Callback delivery crashed for invoice ${invoice.id}`, e);
+      }),
     );
     return true;
+  }
+
+  private enqueue(task: Promise<unknown>): void {
+    const settled = task.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.inFlight.add(settled);
+    void settled.finally(() => {
+      this.inFlight.delete(settled);
+    });
   }
 
   /** @returns текст ошибки или undefined при успехе */

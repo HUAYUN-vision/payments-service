@@ -11,6 +11,14 @@ import {
 export enum InvoiceProvider {
   YOOKASSA = 'yookassa',
   WECHAT = 'wechat',
+  USDT = 'usdt',
+}
+
+/** Сеть приёма USDT. У yookassa и wechat колонка пустая. */
+export enum UsdtNetwork {
+  TON = 'ton',
+  ETHEREUM = 'ethereum',
+  TRON = 'tron',
 }
 
 export enum InvoiceStatus {
@@ -63,8 +71,41 @@ export class InvoiceEntity {
   @Column({ type: 'numeric', precision: 14, scale: 2, transformer: numericTransformer })
   amount: number;
 
-  @Column({ type: 'varchar', length: 3 })
+  @Column({ type: 'varchar', length: 16 })
   currency: string;
+
+  /** ton | ethereum | tron. Только для USDT. */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  network: UsdtNetwork | null;
+
+  /** Адрес, на который отправляют USDT. */
+  @Column({ name: 'pay_address', type: 'varchar', length: 128, nullable: true })
+  payAddress: string | null;
+
+  /**
+   * Сколько отправить. У Ethereum и TRON это amount плюс свободный хвост,
+   * чтобы два pending-инвойса одной сети не совпали по сумме.
+   */
+  @Column({
+    name: 'pay_amount',
+    type: 'numeric',
+    precision: 20,
+    scale: 6,
+    nullable: true,
+    transformer: numericTransformer,
+  })
+  payAmount: number | null;
+
+  /** Комментарий перевода. У TON равен id инвойса, у остальных сетей пусто. */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  memo: string | null;
+
+  /** Хеш транзакции, которой закрыли инвойс. В external_id не пишется. */
+  @Column({ name: 'tx_hash', type: 'varchar', length: 128, nullable: true })
+  txHash: string | null;
+
+  @Column({ name: 'expires_at', type: 'timestamptz', nullable: true })
+  expiresAt: Date | null;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
   description: string | null;
